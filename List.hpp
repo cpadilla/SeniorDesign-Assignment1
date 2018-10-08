@@ -1,10 +1,17 @@
 #ifndef _LIST_HPP_
 #define _LIST_HPP_
 
-template <typename T>
+#include "Node.hpp"
+#include <memory>
+
 class List {
-    Node * head;
-    Node * tail;
+public:
+    unique_ptr<Node> head = make_unique<Node>();
+    unique_ptr<Node> tail = make_unique<Node>();
+    bool add(int item);
+    bool remove(int item);
+    bool contains(int item);
+    List();
 };
 
 #endif
