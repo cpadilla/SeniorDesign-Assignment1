@@ -5,7 +5,7 @@ Node::Node()
 
 };
 
-Node::Node(int item) : item(item), key(item)
+Node::Node(int item) : item{item}, key{item}
 {
 
 };

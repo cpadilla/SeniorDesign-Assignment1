@@ -14,6 +14,7 @@ public:
     bool marked = false;
     unique_ptr<Node> next;
     mutex mtx;
+    Node *next;
     void lock();
     void unlock();
     Node();
