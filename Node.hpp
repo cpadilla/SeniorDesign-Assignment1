@@ -6,15 +6,26 @@
 
 using namespace std;
 
+template <typename T>
+class AtomicReference
+{
+private:
+    T ref; 
+    bool initialMark; 
+
+public:
+    bool compareAndSet(T expectedReference, T newReference, bool expectedMark, bool newMark);
+    bool attemptMark(T expectedReference, bool newMark);
+    Node get(bool marked[]);
+}; 
+
 class Node
 {
 public:
     int item;
     int key; // Key is just the item value
-    bool marked = false;
-    unique_ptr<Node> next;
     mutex mtx;
-    Node *next;
+    AtomicReference<Node> *next;
     void lock();
     void unlock();
     Node();

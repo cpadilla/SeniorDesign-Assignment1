@@ -10,8 +10,8 @@ class Window
 public:
 	Node pred, curr;
 
-	Window(Node myPred, Node&myCurr); 
+	Window(Node *myPred, Node *myCurr); 
 
 	Window find(Node& head, int key); 
 
-}
+}; 
