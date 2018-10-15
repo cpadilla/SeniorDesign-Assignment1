@@ -1,4 +1,5 @@
 #include "List.hpp"
+#include "Node.hpp"
 // List constructor
 List::List()
 {

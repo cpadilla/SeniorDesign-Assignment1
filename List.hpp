@@ -6,25 +6,13 @@
 #include <cstdlib>
 #include <limits.h>
 #include <cstdio>
+#include "Node.hpp"
 using namespace std;
 
 // boolean CAS_PTR for ease of coding.
 #define CAS_PTR_BOOL(addr, old, new) (old == CAS_PTR(addr, old, new))
 #define MEM_BLOCK_SIZE 1000000 //16MB (node_t = 16b)
 #define MEM_BLOCK_CNT 500 // 8GB of mem max
-
-class Node 
-{
-public:
-    uint32_t key;
-    Node* next;
-
-    Node(uint32_t i)
-    {
-    	key = i;
-    	next = nullptr;
-    }
-};
 
 class List
 {
