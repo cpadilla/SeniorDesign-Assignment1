@@ -52,7 +52,7 @@ public:
 
     int Size();
 
-    void Print();
+    void Print(Node *n);
 
 private:
     Node* find(uint32_t key, Node** left_node);

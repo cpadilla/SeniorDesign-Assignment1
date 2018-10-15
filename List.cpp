@@ -41,6 +41,9 @@ Node *List::getMarked(Node *n)
 }
 
 
+// find, add, remove, and contains functions are taken from 
+// Tim Harris' paper:
+// A pragmatic implementation of non-blocking linked-lists
 
 // you are passing a double Node pointer because
 // you want to pass the address of the Node you are 
@@ -187,51 +190,65 @@ bool List::add(uint32_t key)
 // and swap on the right->next field.
 bool List::remove(uint32_t key)
 {
-    Node* left;
-    Node* right;
+    Node *left;
+    Node *right;
+    Node *right_next;
     
     do 
     {
         // find right node that is closest to key value
         // that is also >= key
         right = find(key, &left);
+
         if (right->key != key) 
         {
             cout << "could not remove Node with key: " << key << endl;
-            return false; // does not exist.
+            return false;
         }
-        
-        // n exists! Try to mark right->next.
-        if (__sync_bool_compare_and_swap(&(right->next), getUnmarked(right->next), getMarked(right->next))) 
+        right_next = right->next;
+        if(!isMarked(right_next))
         {
-            // Also try to link left with right->next. 
-            // if it fails it's ok - someone else fixed it.
-            __sync_bool_compare_and_swap(&(left->next), right, getUnmarked(right->next));
-            cout << "successfully removed Node with key: " << key << endl;
-            return true;
+        	// this compare and swap is utilitzed to see 
+        	// if another thread has affected the nodes you're 
+        	// trying to manipulate. 
+        	if(__sync_bool_compare_and_swap(&(right->next), right_next, getMarked(right_next)))
+        	{
+        		break;
+        	}
         }
 
-    // If CAS fails, something changed. Retry!
     } while (true);
+
+    if(!__sync_bool_compare_and_swap(&(left->next), right, right_next))
+    {
+    	right = find(right->key, &left);
+    }
+    cout << "successfully removed Node with key: " << key << endl;
+    return true;
 }
 
 // search the list for a value. If it exists in the list,
 // return true. Else, return false.
 bool List::contains(uint32_t key)
 {
-    Node* left;
-    return (find(key, &left)->key == key);
+    Node *right, *left;
+    right = find(key, &left); 
+    // check if rightmost Node is tail Node
+    // or keys do not match
+    if(right == tail || right->key != key)
+    	return false;
+    // else, the keys do match. Return true.
+    else
+    	return true;
 }
 
-void List::Print()
+// recursive function to print a linked list 
+void List::Print(Node *n)
 {
-    Node* curr = head->next;
-
-    while(curr)
-    {
-        printf("Node [%p] Key [%u]\n", curr, curr->key);
-        curr = curr->next;
-    }
+    if(n == NULL)
+    	return;
+    printf("Node [%p] Key [%u]\n", n, n->key); 
+    Print(n->next);
 }
 
 int main(void)
@@ -243,7 +260,8 @@ int main(void)
     list->add(12);
     list->remove(12);
     list->remove(27);  
+    cout << "result of list->contains(19): " << list->contains(19) << endl; 
 
-    list->Print(); 
+    list->Print(list->head); 
     return 0;
 }
