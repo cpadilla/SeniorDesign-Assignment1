@@ -1,25 +1,249 @@
 #include "List.hpp"
-
+// List constructor
 List::List()
 {
-    head->key = -1;
-    tail->key = 2147483647;
-    head->next = move(tail);
+    // create new tail Node
+    tail = new Node(INT_MAX);
+    
+    // create new head Node and set its 
+    // next pointer to tail
+    head = new Node(0); 
+    head->next = tail;
+
+    // initialize mark to the value of 1. 
+    // This will be used later for bit-masking
+    mark = 0x1;
+
+    // Initialize the memory pool and the first block.
+    memptr = 0;
+    mem = (Node**)malloc(MEM_BLOCK_CNT*sizeof(Node));
+    mem[0] = (Node*)malloc(MEM_BLOCK_SIZE*sizeof(Node));
+
+    
 }
 
-bool List::add(int item)
+// these next three algorithms are based off of Algorithm 2 
+// of the paper:
+// Lock-free Transactions without Rollbacks for Linked Data Structures
+bool List::isMarked(Node *n) 
 {
-    return true;
+  return (bool) ((intptr_t)n & mark);
 }
 
-bool List::remove(int item)
+Node *List::getUnmarked(Node *n) 
 {
-    // test
-
-    return true;
+  return (Node *)((intptr_t)n & ~mark);
 }
 
-bool List::contains(int item)
+Node *List::getMarked(Node *n) 
 {
-    return true;
+  return (Node *)((intptr_t)n | mark);
+}
+
+
+
+// you are passing a double Node pointer because
+// you want to pass the address of the Node you are 
+// trying to redirect. 
+Node *List::find(uint32_t key, Node** left)
+{
+    // create a Node *right so that you have the 
+    // rightmost position of the list before you 
+    // get to a value that is equal to key or 
+    // as close to that value, but greater.
+    Node *right;
+
+    // create a Node *left_next so that you can 
+    // check, when right is assigned, if right is
+    // the immediate successor to left. This checks
+    // for if there are any marked Nodes intermitently between
+    // left and right that need to be "removed"
+    Node *left_next;
+
+    search:
+    do 
+    {
+        // i will traverse through the list, starting
+        // from head
+        Node *i = head;
+        Node *i_next = i->next;
+
+        // the while conditional for this loop states:
+        // traverse the list for as long as the traversing Node's
+        // key is strictly less than the searched key, or we are 
+        // traversing over marked Nodes that have been logically
+        // removed
+        do 
+        {
+        	// if the next Node in the list being traversed is 
+        	// not marked, in other words, logically removed, then
+        	// set the passed in left pointer to point to that Node.
+            if (!isMarked(i_next)) 
+            {
+                (*left) = i;
+                left_next = i_next;
+            }
+
+            // i iterates through the list, but only containing the 
+            // unmarked version of its next pointer
+            i = getUnmarked(i_next);
+
+            // break if you reach the end of the list
+            if(i == tail)
+            {
+                break;
+            }
+
+            // increment i_next to the next Node in the list
+            i_next = i->next;
+
+        } while (isMarked(i_next) || i->key < key);
+
+        // set the rightmost node to the last Node that was traversed
+        // in the above for loop
+        right = i;
+
+        // if the left and right nodes are adjacent to each other, 
+        // i.e. there are no logically removed nodes in between 
+        // left and right
+        if (left_next == right)
+        {
+            if((right != tail) && isMarked(right->next))
+            {
+                goto search;
+            }
+
+            // return the rightmost node
+            else
+            {
+                return right;
+            }
+        }
+
+        // if the above case does not hold, i.e. there are logically 
+        // removed nodes between left and right, then you have to 
+        // try to switch what left->next points to, to the right Node.
+        if(__sync_bool_compare_and_swap(&(*left)->next, left_next, right))
+        {
+            if(right != tail && isMarked(right->next))
+                goto search;
+            else
+                return right;
+        }
+    } while (true); 
+}
+
+// insert a Node, n, with n->key value of key.
+// Insert only if the key value does not already exist in the set.
+bool List::add(uint32_t key)
+{
+    Node* n = NULL;
+    Node* left;
+    Node* right;
+
+    do {
+        // find right node that is closest to key value
+        // that is also >= key
+        right = find(key, &left);
+        if (right->key == key) 
+        {
+            cout << "could not insert Node with key: " << key << " The node already exists in the set." << endl;
+            return false;
+        }
+
+        if (n == NULL) {
+            uint32_t my_memptr = __sync_fetch_and_add(&memptr, 1);
+            uint32_t my_memblock = my_memptr/MEM_BLOCK_SIZE;
+
+            if(mem[my_memblock] == NULL) {
+                Node* tmpmem = (Node*)malloc(MEM_BLOCK_SIZE*sizeof(Node));
+   
+                if(!__sync_bool_compare_and_swap(&mem[my_memblock], NULL, tmpmem)) 
+                {
+                    free(tmpmem);
+                }
+            }
+            n = &mem[my_memblock][my_memptr%MEM_BLOCK_SIZE];
+            n->key = key;
+        }
+        
+        // you want n->next pointing to the right node 
+        // because that is the insertion point of the list
+        n->next = right;
+
+        // change left->next to point to the newly inserted
+        // Node, n. 
+        if (__sync_bool_compare_and_swap(&(left->next), right, n)) 
+        {
+            cout << "successfully inserted Node with key: " << key << endl;
+            return true;
+        }
+    } while (true);
+}
+
+// remove Node with key value <key> if it exists
+// in the list. If not, return false. 
+// The Node is only logically removed, as you do a compare
+// and swap on the right->next field.
+bool List::remove(uint32_t key)
+{
+    Node* left;
+    Node* right;
+    
+    do 
+    {
+        // find right node that is closest to key value
+        // that is also >= key
+        right = find(key, &left);
+        if (right->key != key) 
+        {
+            cout << "could not remove Node with key: " << key << endl;
+            return false; // does not exist.
+        }
+        
+        // n exists! Try to mark right->next.
+        if (__sync_bool_compare_and_swap(&(right->next), getUnmarked(right->next), getMarked(right->next))) 
+        {
+            // Also try to link left with right->next. 
+            // if it fails it's ok - someone else fixed it.
+            __sync_bool_compare_and_swap(&(left->next), right, getUnmarked(right->next));
+            cout << "successfully removed Node with key: " << key << endl;
+            return true;
+        }
+
+    // If CAS fails, something changed. Retry!
+    } while (true);
+}
+
+// search the list for a value. If it exists in the list,
+// return true. Else, return false.
+bool List::contains(uint32_t key)
+{
+    Node* left;
+    return (find(key, &left)->key == key);
+}
+
+void List::Print()
+{
+    Node* curr = head->next;
+
+    while(curr)
+    {
+        printf("Node [%p] Key [%u]\n", curr, curr->key);
+        curr = curr->next;
+    }
+}
+
+int main(void)
+{
+    List *list = new List();
+    list->add(15);
+    list->add(12);
+    list->add(19);
+    list->add(12);
+    list->remove(12);
+    list->remove(27);  
+
+    list->Print(); 
+    return 0;
 }
