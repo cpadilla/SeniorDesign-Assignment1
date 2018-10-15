@@ -251,7 +251,7 @@ void List::Print(Node *n)
     printf("Node [%p] Key [%u]\n", n, n->key); 
     Print(n->next);
 }
-
+/*
 int main(void)
 {
     List *list = new List();
@@ -265,4 +265,4 @@ int main(void)
 
     list->Print(list->head); 
     return 0;
-}
+}*/
